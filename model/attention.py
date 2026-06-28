@@ -148,7 +148,7 @@ def _causal_linear_attention(Q: torch.Tensor, K: torch.Tensor,
     Returns:
         out: (B, H, T, K)
     """
-    B, H, T, K = Q.shape
+    B, H, T, d_k = Q.shape
     device = Q.device
     dtype = Q.dtype
 
