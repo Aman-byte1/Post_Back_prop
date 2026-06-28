@@ -310,6 +310,8 @@ class SequentialTrainer:
                 break
             stats = self.train_layer(layer_idx)
             all_stats.append(stats)
+            # Remove all activations older than this layer to free disk space (keep only current layer_idx)
+            self.act_cache.cleanup(keep_layers={layer_idx})
 
         total_time = time.time() - self.start_time
         self._log("=" * 60)

@@ -79,7 +79,7 @@ class TrainingConfig:
     # --- Data ---
     dataset_name: str = "openwebtext"   # HuggingFace dataset identifier
     dataset_subset: Optional[str] = None
-    max_tokens_per_layer: int = 15_000_000  # ~15 M tokens budget per layer
+    max_tokens_per_layer: int = 1_000_000   # ~1M tokens budget per layer (safe for disk limits)
     num_workers: int = 2                # DataLoader workers
 
     # --- Layer swapping ---
