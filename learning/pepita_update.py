@@ -127,17 +127,19 @@ class PEPITAUpdater:
             # Raw update: cross-correlation of input with output difference
             raw_update = pre_flat.T @ delta_flat / N     # (d_in, d_out)
 
-            # RMS normalisation (LN-CHL): prevents vanishing/exploding
-            rms = raw_update.pow(2).mean().sqrt().clamp(min=1e-8)
-            normalised = raw_update / rms
+            # Clamp update elements to prevent anomalous steps
+            raw_update.clamp_(min=-0.1, max=0.1)
 
             # Optional momentum
             if name not in self._momentum:
-                self._momentum[name] = torch.zeros_like(normalised)
+                self._momentum[name] = torch.zeros_like(raw_update)
             self._momentum[name] = (
                 self._momentum_beta * self._momentum[name]
-                + (1 - self._momentum_beta) * normalised
+                + (1 - self._momentum_beta) * raw_update
             )
+
+            # Weight decay (L2 regularisation) to keep parameters bounded
+            W.data.mul_(1.0 - lr * 1e-4)
 
             # Apply update (in-place, no autograd)
             final_update = lr * self._momentum[name].to(W.dtype)
@@ -177,7 +179,10 @@ def compute_norm_updates(norm_layer, h_free: torch.Tensor,
     """
     diff = h_perturbed.float().abs().mean(dim=(0, 1)) - \
            h_free.float().abs().mean(dim=(0, 1))      # (D,)
-    rms = diff.pow(2).mean().sqrt().clamp(min=1e-8)
-    update = lr * (diff / rms)
+    
+    # Clamp update elements to prevent anomalous steps
+    diff.clamp_(min=-0.1, max=0.1)
+    
+    update = lr * diff
     norm_layer.gain.data.add_(update.to(norm_layer.gain.dtype))
     return update.norm().item()
