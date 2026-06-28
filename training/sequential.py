@@ -256,7 +256,11 @@ class SequentialTrainer:
         # Flush activation cache
         writer.flush()
 
-        # Save checkpoint
+        # Free disk space BEFORE saving checkpoint —
+        # delete all activation files except this layer's output
+        self.act_cache.cleanup(keep_layers={layer_idx})
+
+        # Save checkpoint (layer weights only — head is auxiliary)
         save_checkpoint(layer_idx, layer, head, updater, tc.checkpoint_dir)
 
         # Offload
@@ -310,8 +314,6 @@ class SequentialTrainer:
                 break
             stats = self.train_layer(layer_idx)
             all_stats.append(stats)
-            # Remove all activations older than this layer to free disk space (keep only current layer_idx)
-            self.act_cache.cleanup(keep_layers={layer_idx})
 
         total_time = time.time() - self.start_time
         self._log("=" * 60)

@@ -90,13 +90,15 @@ class ActivationCache:
 
 def save_checkpoint(layer_idx: int, layer, head, updater,
                     checkpoint_dir: str):
-    """Save a trained layer's weights to disk."""
+    """Save a trained layer's weights to disk.
+    
+    Only saves the transformer layer weights (not the auxiliary
+    prediction head) to minimise disk usage (~226 MB per layer
+    instead of ~535 MB).
+    """
     os.makedirs(checkpoint_dir, exist_ok=True)
     path = os.path.join(checkpoint_dir, f"layer_{layer_idx:03d}.pt")
-    torch.save({
-        "layer": layer.state_dict(),
-        "head": head.state_dict(),
-    }, path)
+    torch.save({"layer": layer.state_dict()}, path)
 
 
 def load_checkpoint(layer_idx: int, layer, head,
@@ -107,5 +109,5 @@ def load_checkpoint(layer_idx: int, layer, head,
         return False
     data = torch.load(path, map_location="cpu", weights_only=True)
     layer.load_state_dict(data["layer"])
-    head.load_state_dict(data["head"])
     return True
+
