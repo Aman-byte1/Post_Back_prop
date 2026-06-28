@@ -96,9 +96,9 @@ class LinearAttention:
         # Cache intermediates for PEPITA
         cache = {
             "h_in": h,             # pre-synaptic for Q, K, V
-            "Q": Q.view(B, T, D),  # post-synaptic for W_Q (reshaped flat)
-            "K": Kmat.view(B, T, D),
-            "V": V.view(B, T, D),
+            "Q": Q.reshape(B, T, D),  # post-synaptic for W_Q (reshaped flat)
+            "K": Kmat.reshape(B, T, D),
+            "V": V.reshape(B, T, D),
             "attn_ctx": attn_out,  # pre-synaptic for W_O
             "out": out,            # post-synaptic for W_O
         }
