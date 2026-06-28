@@ -1,0 +1,17 @@
+# Ignored directories
+data_cache/
+cache/
+checkpoints/
+
+# Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyTorch checkpoints
+*.pt
+*.pth
+
+# OS files
+.DS_Store
+Thumbs.db
