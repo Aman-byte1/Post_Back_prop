@@ -80,12 +80,16 @@ class LinearAttention:
             attn_out = _causal_linear_attention(Q_feat, K_feat, V)
         else:
             # Non-causal: standard linear attention
-            KV = K_feat.transpose(-2, -1) @ V        # (B, H, K, K)
-            Z = K_feat.transpose(-2, -1).sum(dim=-1, keepdim=True)  # (B, H, K, 1)
-            attn_out = Q_feat @ KV                    # (B, H, T, K)
+            # Cast to float32 to prevent overflow in intermediates
+            K_f32 = K_feat.float()
+            Q_f32 = Q_feat.float()
+            V_f32 = V.float()
+            KV = K_f32.transpose(-2, -1) @ V_f32        # (B, H, K, K)
+            Z = K_f32.transpose(-2, -1).sum(dim=-1, keepdim=True)  # (B, H, K, 1)
+            attn_out_f32 = Q_f32 @ KV                    # (B, H, T, K)
             # Normalize by sum of kernel values for numerical stability
-            denom = Q_feat @ Z                        # (B, H, T, 1)
-            attn_out = attn_out / denom.clamp(min=1e-6)
+            denom = Q_f32 @ Z                            # (B, H, T, 1)
+            attn_out = (attn_out_f32 / denom.clamp(min=1e-6)).to(self.W_O.dtype)
 
         # --- Reshape back ---
         attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, D)  # (B, T, D)
@@ -152,6 +156,11 @@ def _causal_linear_attention(Q: torch.Tensor, K: torch.Tensor,
     device = Q.device
     dtype = Q.dtype
 
+    # Cast to float32 to prevent float16 overflow in cumulative sum
+    Q_f32 = Q.float()
+    K_f32 = K.float()
+    V_f32 = V.float()
+
     # Accumulate KV outer products cumulatively
     # K: (B, H, T, K), V: (B, H, T, K)
     # We want S_t = sum_{i=1}^{t} K_i^T V_i  →  shape (B, H, K, K)
@@ -159,15 +168,15 @@ def _causal_linear_attention(Q: torch.Tensor, K: torch.Tensor,
 
     # Efficient vectorised implementation using cumsum on the
     # outer-product tensor KV_{t} = k_t ⊗ v_t
-    KV = torch.einsum("bhti,bhtj->bhtij", K, V)  # (B, H, T, K, K)
-    S = KV.cumsum(dim=2)                           # (B, H, T, K, K)
+    KV = torch.einsum("bhti,bhtj->bhtij", K_f32, V_f32)  # (B, H, T, K, K)
+    S = KV.cumsum(dim=2)                                 # (B, H, T, K, K)
 
     # out_t = Q_t @ S_t → einsum over the K dimension
-    out = torch.einsum("bhti,bhtij->bhtj", Q, S)  # (B, H, T, K)
+    out = torch.einsum("bhti,bhtij->bhtj", Q_f32, S)      # (B, H, T, K)
 
     # Normalise by cumulative key sums for stability
-    Z = K.cumsum(dim=2)                            # (B, H, T, K)
-    denom = (Q * Z).sum(dim=-1, keepdim=True)      # (B, H, T, 1)
+    Z = K_f32.cumsum(dim=2)                               # (B, H, T, K)
+    denom = (Q_f32 * Z).sum(dim=-1, keepdim=True)         # (B, H, T, 1)
     out = out / denom.clamp(min=1e-6)
 
-    return out
+    return out.to(dtype)
