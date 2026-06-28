@@ -74,9 +74,11 @@ class FFN:
             out:   (B, T, D)
             cache: dict with pre/post-synaptic activations for W_up and W_down
         """
-        up = h @ self.W_up                     # (B, T, d_ffn)
-        act = F.gelu(up.float()).to(h.dtype)   # GELU in fp32 then back
-        out = act @ self.W_down                # (B, T, D)
+        # Compute in float32 to prevent fp16 overflow in large matmuls
+        h_f32 = h.float()
+        up = (h_f32 @ self.W_up.float()).to(h.dtype)   # (B, T, d_ffn)
+        act = F.gelu(up.float()).to(h.dtype)            # GELU in fp32 then back
+        out = (act.float() @ self.W_down.float()).to(h.dtype)  # (B, T, D)
 
         cache = {
             "ffn_in": h,      # pre-synaptic for W_up

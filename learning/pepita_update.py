@@ -82,7 +82,8 @@ class PEPITAUpdater:
             h_perturbed: (B, T, D) perturbed input.
         """
         # error: (B, T, V) @ F_proj^T: (V, D) → (B, T, D)
-        perturbation = error @ self.F_proj.T   # (B, T, D)
+        # Compute in fp32 to prevent overflow (V=50257 is a large reduction dim)
+        perturbation = (error.float() @ self.F_proj.float().T).to(h_prev.dtype)  # (B, T, D)
         return h_prev + self.scale * perturbation
 
     def compute_weight_updates(

@@ -60,10 +60,16 @@ class LinearAttention:
         B, T, D = h.shape
         H, K = self.n_heads, self.d_head
 
-        # --- Projections (linear layers) ---
-        Q = h @ self.W_Q                       # (B, T, D)
-        Kmat = h @ self.W_K                    # (B, T, D)
-        V = h @ self.W_V                       # (B, T, D)
+        # --- Projections in float32 to prevent fp16 overflow ---
+        h_f32 = h.float()
+        W_Q_f32 = self.W_Q.float()
+        W_K_f32 = self.W_K.float()
+        W_V_f32 = self.W_V.float()
+        W_O_f32 = self.W_O.float()
+
+        Q = (h_f32 @ W_Q_f32).to(h.dtype)             # (B, T, D)
+        Kmat = (h_f32 @ W_K_f32).to(h.dtype)          # (B, T, D)
+        V = (h_f32 @ W_V_f32).to(h.dtype)             # (B, T, D)
 
         # --- Reshape to multi-head ---
         Q = Q.view(B, T, H, K).transpose(1, 2)      # (B, H, T, K)
@@ -79,23 +85,21 @@ class LinearAttention:
             # Avoids materializing T×T matrix
             attn_out = _causal_linear_attention(Q_feat, K_feat, V)
         else:
-            # Non-causal: standard linear attention
-            # Cast to float32 to prevent overflow in intermediates
+            # Non-causal: standard linear attention in float32
             K_f32 = K_feat.float()
             Q_f32 = Q_feat.float()
             V_f32 = V.float()
             KV = K_f32.transpose(-2, -1) @ V_f32        # (B, H, K, K)
             Z = K_f32.transpose(-2, -1).sum(dim=-1, keepdim=True)  # (B, H, K, 1)
             attn_out_f32 = Q_f32 @ KV                    # (B, H, T, K)
-            # Normalize by sum of kernel values for numerical stability
             denom = Q_f32 @ Z                            # (B, H, T, 1)
-            attn_out = (attn_out_f32 / denom.clamp(min=1e-6)).to(self.W_O.dtype)
+            attn_out = (attn_out_f32 / denom.clamp(min=1e-6)).to(h.dtype)
 
         # --- Reshape back ---
         attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, D)  # (B, T, D)
 
-        # --- Output projection ---
-        out = attn_out @ self.W_O    # (B, T, D)
+        # --- Output projection in float32 ---
+        out = (attn_out.float() @ W_O_f32).to(h.dtype)    # (B, T, D)
 
         # Cache intermediates for PEPITA
         cache = {

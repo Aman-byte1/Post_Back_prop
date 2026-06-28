@@ -40,7 +40,8 @@ class LocalPredictionHead:
         Returns:
             logits: (B, T, V) unnormalised log-probabilities.
         """
-        return h @ self.weight.T  # (B, T, V)
+        # Compute in float32 to prevent fp16 overflow (D=3072 reduction dim)
+        return (h.float() @ self.weight.float().T).to(h.dtype)  # (B, T, V)
 
     def compute_error_and_update(
         self, h: torch.Tensor, target_ids: torch.Tensor, lr: float
